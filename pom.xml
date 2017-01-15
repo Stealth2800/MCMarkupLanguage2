@@ -37,6 +37,11 @@
 
     <repositories>
         <repository>
+            <id>spigot-repo</id>
+            <url>https://hub.spigotmc.org/nexus/content/repositories/snapshots/</url>
+        </repository>
+
+        <repository>
             <id>kotlin-1.1-eap-repo</id>
             <url>http://dl.bintray.com/kotlin/kotlin-eap-1.1</url>
         </repository>
