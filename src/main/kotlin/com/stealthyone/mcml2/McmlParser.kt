@@ -85,12 +85,14 @@ class McmlParser(vararg serializers: JsonSerializer) {
         val rawComponents = ArrayList<BaseComponent>()
 
         /* Set replacements */
-        replacements?.forEach { k, v ->
-            raw = raw.replace(k, if (v == null) {
-                "null"
-            } else {
-                (serializers?.get(v.javaClass)?.serialize(v) ?: v.toString()).replace("\"", "\\\"")
-            })
+        if (replacements != null) {
+            for ((k, v) in replacements) {
+                raw = raw.replace(k, if (v == null) {
+                    "null"
+                } else {
+                    (serializers?.get(v.javaClass)?.serialize(v) ?: v.toString()).replace("\"", "\\\"")
+                })
+            }
         }
 
         /* Parse Events */
