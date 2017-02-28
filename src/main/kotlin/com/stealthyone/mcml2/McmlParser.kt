@@ -45,7 +45,7 @@ class McmlParser(vararg serializers: JsonSerializer) {
         const val HOVER_ENTITY = "E"
 
         val COLOR_PATTERN = Regex("${ChatColor.COLOR_CHAR}[a-f0-9klmnor]")
-        val EVENT_PATTERN = Regex("""\[(.+?)\]\((?:([!?>/#])"((?:\\.|[^"\\])*)")? ?(?:([AEIT])?"((?:\\.|[^"\\])*)")?\)""")
+        val EVENT_PATTERN = Regex("""\[((?:\\.|[^]\\])+?)\]\((?:([!?>\/#])"((?:\\.|[^"\\])*)")? ?(?:([AEIT])?"((?:\\.|[^"\\])*)")?\)""")
 
     }
 
