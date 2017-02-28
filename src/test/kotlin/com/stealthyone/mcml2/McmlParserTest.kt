@@ -127,6 +127,32 @@ class McmlParserTest {
                                 .append("!").italic(true).create()))
                         .append("here!").color(ChatColor.GREEN)
                         .create())
+
+        assertMcmlEquals(translate("Example [broadcast](\"&aSupports hover text!\") message"), ComponentBuilder("Example ")
+                .append("broadcast")
+                .event(HoverEvent(HoverEvent.Action.SHOW_TEXT, ComponentBuilder("Supports hover text!")
+                        .color(ChatColor.GREEN).create()))
+                .append(" message", ComponentBuilder.FormatRetention.NONE)
+                .create())
+
+        assertMcmlEquals(translate("&8[&a&lInfo&8] &fExample [broadcast](\"&aSupports hover text!\") message"), ComponentBuilder("[").color(ChatColor.DARK_GRAY)
+                .append("Info").bold(true).color(ChatColor.GREEN)
+                .append("] ", ComponentBuilder.FormatRetention.NONE).color(ChatColor.DARK_GRAY)
+                .append("Example ").color(ChatColor.WHITE)
+                .append("broadcast")
+                .event(HoverEvent(HoverEvent.Action.SHOW_TEXT, ComponentBuilder("Supports hover text!")
+                        .color(ChatColor.GREEN).create()))
+                .append(" message", ComponentBuilder.FormatRetention.NONE)
+                .create())
+
+        assertMcmlEquals(translate("&8[&a&lInfo&8\\] &fExample [broadcast](\"&aSupports hover text!\") message"),
+                ComponentBuilder("Info").bold(true).color(ChatColor.GREEN)
+                        .event(HoverEvent(HoverEvent.Action.SHOW_TEXT, ComponentBuilder("Supports hover text!")
+                                .color(ChatColor.GREEN).create()))
+                .append("\\] ", ComponentBuilder.FormatRetention.EVENTS).color(ChatColor.DARK_GRAY)
+                .append("Example [broadcast").color(ChatColor.WHITE)
+                .append(" message", ComponentBuilder.FormatRetention.NONE)
+                .create())
     }
 
 }
