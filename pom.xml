@@ -6,7 +6,7 @@
 
     <groupId>com.stealthyone</groupId>
     <artifactId>mcml2</artifactId>
-    <version>1.1.1</version>
+    <version>1.1.2</version>
     <name>MCMarkupLanguage2</name>
     <description>Text parser for BungeeCord's ChatComponent API</description>
     <inceptionYear>2017</inceptionYear>
@@ -35,6 +35,13 @@
         </snapshotRepository>
     </distributionManagement>
 
+    <repositories>
+        <repository>
+            <id>spigot-repo</id>
+            <url>https://hub.spigotmc.org/nexus/content/groups/public</url>
+        </repository>
+    </repositories>
+
     <dependencies>
         <dependency>
             <groupId>org.jetbrains.kotlin</groupId>
@@ -60,13 +67,6 @@
             <version>4.12</version>
         </dependency>
     </dependencies>
-
-    <pluginRepositories>
-        <pluginRepository>
-            <id>kotlin-1.1-eap-repo</id>
-            <url>http://dl.bintray.com/kotlin/kotlin-eap-1.1</url>
-        </pluginRepository>
-    </pluginRepositories>
 
     <build>
         <defaultGoal>clean install</defaultGoal>
