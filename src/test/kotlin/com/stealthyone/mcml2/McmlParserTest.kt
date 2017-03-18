@@ -20,6 +20,7 @@ import net.md_5.bungee.api.chat.BaseComponent
 import net.md_5.bungee.api.chat.ClickEvent
 import net.md_5.bungee.api.chat.ComponentBuilder
 import net.md_5.bungee.api.chat.HoverEvent
+import net.md_5.bungee.api.chat.TextComponent
 import org.junit.Test
 
 class McmlParserTest {
@@ -39,6 +40,21 @@ class McmlParserTest {
                 "Input string '$raw' failed test:\nParsed: $str2\nExpected: $str1"
             }
         }
+    }
+
+    @Test
+    fun replaceTest() {
+        assertMcmlEquals(
+                translate("Hello {1} This is an {2} test!"),
+                ComponentBuilder("Hello WORLD This is an AWESOME test!").create(),
+                mapOf("{1}" to "WORLD", "{2}" to "AWESOME")
+        )
+
+        assertMcmlEquals(
+                translate("Hello {1} there!"),
+                ComponentBuilder("Hello [Hello](\"Hover Text!\") there!").create(),
+                mapOf("{1}" to "[Hello](\"Hover Text!\")")
+        )
     }
 
     @Test
@@ -89,6 +105,14 @@ class McmlParserTest {
         assertMcmlEquals(translate("""[Click!](!"/say hello")"""), ComponentBuilder("Click!")
                 .event(ClickEvent(ClickEvent.Action.RUN_COMMAND, "/say hello")).create())
 
+        assertMcmlEquals(translate("""[Click!](!"/profile")"""), ComponentBuilder("Click!")
+                .event(ClickEvent(ClickEvent.Action.RUN_COMMAND, "/profile")).create())
+
+        assertMcmlEquals(translate("""[Hover!]("&aHello!")"""), ComponentBuilder("Hover!")
+                .event(HoverEvent(HoverEvent.Action.SHOW_TEXT,
+                        ComponentBuilder("Hello!").color(ChatColor.GREEN).create()))
+                .create())
+
         assertMcmlEquals(translate("""[Click!](!"/say hello" "Message")"""), ComponentBuilder("Click!")
                 .event(ClickEvent(ClickEvent.Action.RUN_COMMAND, "/say hello"))
                 .event(HoverEvent(HoverEvent.Action.SHOW_TEXT, ComponentBuilder("Message").create()))
@@ -101,7 +125,7 @@ class McmlParserTest {
                 .create())
 
         assertMcmlEquals(translate("""&aText[Click!](!"/say hello" "Message")"""), ComponentBuilder("Text").color(ChatColor.GREEN)
-                .append("Click!", ComponentBuilder.FormatRetention.NONE)
+                .append("Click!")
                 .event(ClickEvent(ClickEvent.Action.RUN_COMMAND, "/say hello"))
                 .event(HoverEvent(HoverEvent.Action.SHOW_TEXT, ComponentBuilder("Message").create()))
                 .create())
@@ -119,7 +143,7 @@ class McmlParserTest {
 
         assertMcmlEquals(translate("""&bText [Click &ahere!](!"/say hello" "&aCol&4ored &b&lMessage&o!")"""),
                 ComponentBuilder("Text ").color(ChatColor.AQUA)
-                        .append("Click ", ComponentBuilder.FormatRetention.NONE)
+                        .append("Click ")
                         .event(ClickEvent(ClickEvent.Action.RUN_COMMAND, "/say hello"))
                         .event(HoverEvent(HoverEvent.Action.SHOW_TEXT, ComponentBuilder("Col").color(ChatColor.GREEN)
                                 .append("ored ").color(ChatColor.DARK_RED)
@@ -149,7 +173,7 @@ class McmlParserTest {
                 ComponentBuilder("Info").bold(true).color(ChatColor.GREEN)
                         .event(HoverEvent(HoverEvent.Action.SHOW_TEXT, ComponentBuilder("Supports hover text!")
                                 .color(ChatColor.GREEN).create()))
-                .append("\\] ", ComponentBuilder.FormatRetention.EVENTS).color(ChatColor.DARK_GRAY)
+                .append("] ", ComponentBuilder.FormatRetention.EVENTS).color(ChatColor.DARK_GRAY)
                 .append("Example [broadcast").color(ChatColor.WHITE)
                 .append(" message", ComponentBuilder.FormatRetention.NONE)
                 .create())

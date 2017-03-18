@@ -20,9 +20,8 @@ import net.md_5.bungee.api.chat.BaseComponent
 import net.md_5.bungee.api.chat.ClickEvent
 import net.md_5.bungee.api.chat.HoverEvent
 import net.md_5.bungee.api.chat.TextComponent
-import java.lang.IllegalArgumentException
-import java.util.ArrayList
 import java.util.HashMap
+import java.util.LinkedList
 
 /**
  * An instance of an MCML2 parser.
@@ -33,23 +32,22 @@ class McmlParser(vararg serializers: JsonSerializer) {
 
     private companion object {
 
-        const val CLICK_COMMAND = "!"
-        const val CLICK_SUGGEST_COMMAND = "?"
-        const val CLICK_URL = ">"
-        const val CLICK_FILE = "/"
-        const val CLICK_CHANGE_PAGE = "#"
+        const val CLICK_COMMAND = '!'
+        const val CLICK_SUGGEST_COMMAND = '?'
+        const val CLICK_URL = '>'
+        const val CLICK_FILE = '/'
+        const val CLICK_CHANGE_PAGE = '#'
 
-        const val HOVER_TEXT = "T"
-        const val HOVER_ACHIEVEMENT = "A"
-        const val HOVER_ITEM = "I"
-        const val HOVER_ENTITY = "E"
-
-        val COLOR_PATTERN = Regex("${ChatColor.COLOR_CHAR}[a-f0-9klmnor]")
-        val EVENT_PATTERN = Regex("""\[((?:\\.|[^]\\])+?)\]\((?:([!?>\/#])"((?:\\.|[^"\\])*)")? ?(?:([AEIT])?"((?:\\.|[^"\\])*)")?\)""")
+        const val HOVER_TEXT = 'T'
+        const val HOVER_ACHIEVEMENT = 'A'
+        const val HOVER_ITEM = 'I'
+        const val HOVER_ENTITY = 'E'
 
     }
 
     private val serializers: MutableMap<Class<*>, JsonSerializer>?
+
+    var replacementIndexOffset = 1
 
     init {
         this.serializers = if (serializers.isEmpty()) {
@@ -63,11 +61,14 @@ class McmlParser(vararg serializers: JsonSerializer) {
 
     /**
      * Convenience method. Converts the input replacements array into a map of index -> object (starting at 1).
+     * Array [Hello, World] will become map [{1} => Hello, {2} => World], so a string like "{1} {2}" is expected.
+     *
+     * The beginning index can be changed via a parser instance's [replacementIndexOffset] property.
      */
     fun parse(raw: String, replacements: Array<out Any?>): Array<out BaseComponent> {
         return parse(raw, HashMap<String, Any?>().apply {
             for ((i, obj) in replacements.withIndex()) {
-                put("{${i + 1}}", obj)
+                put("{${i + replacementIndexOffset}}", obj)
             }
         })
     }
@@ -80,172 +81,321 @@ class McmlParser(vararg serializers: JsonSerializer) {
      *                     Items should be in JSON, which can be done easily for Bukkit via [BukkitJsonSerializer].
      */
     fun parse(raw: String, replacements: Map<String, Any?>? = null): Array<out BaseComponent> {
-        @Suppress("NAME_SHADOWING")
-        var raw = raw
-        val rawComponents = ArrayList<BaseComponent>()
+        val builder = StringBuilder(raw)
 
-        /* Set replacements */
+        val components = LinkedList<BaseComponent>()
+
+        // Set replacements and keep track of indices
+        val replacedIndices = LinkedList<IntRange>()
         replacements?.forEach { k, v ->
-            raw = raw.replace(k, if (v == null) {
-                "null"
-            } else {
-                (serializers?.get(v.javaClass)?.serialize(v) ?: v.toString()).replace("\"", "\\\"")
-            })
+            val start = builder.indexOf(k)
+            if (start == -1) return@forEach
+
+            val replacement = v as? String ?: (v?.let { serializers?.get(v::class.java)?.serialize(v) } ?: "null")
+
+            builder.replace(start, start + k.length, replacement)
+            replacedIndices.add(start .. start + replacement.length - 1)
         }
 
-        /* Parse Events */
-        var prevRange = IntRange(-1, -1)
-        val matches = EVENT_PATTERN.findAll(raw)
-        for (match in matches) {
-            /*
-             * Groups
-             * 1: Text
-             * 2: Event type (empty if no event is specified)
-             * 3: Event value (empty if no event is specified)
-             * 4: Hover type (empty defaults to text)
-             * 5: Hover text
-             */
+        // Parse colors and events
+        var curComponent = TextComponent()
+        var partBuilder = StringBuilder()
+        var isEscaped = false
+        var isColorCode = false
+        var isReplacement = false
 
-            // Check for unhandled text
-            if (match.range.first != prevRange.endInclusive + 1) {
-                parseColors(raw.substring(prevRange.endInclusive + 1, match.range.first), rawComponents)
+        var isGroup = false
+        var isExpectingSecondGroupPart = false
+        var isGroupSecondPart = false
+        var isGroupQuote = false
+        var activeEvent: Char? = null
+        var eventComponentIndex = -1
+
+        /**
+         * Advances the current component.
+         * This should only occur when:
+         *   - A color code is reached
+         *   - A reset code is reached
+         *   - An event shows up
+         *
+         * @param reset If true, resets the colors and formatting.
+         *              If false, colors and formatting will be carried over to the next component.
+         */
+        fun advanceComponent(reset: Boolean, createNew: Boolean = true) {
+            // Only add component if it has text or there is text to set
+            if (curComponent.text.isNotEmpty()) {
+                components.add(curComponent)
+            } else if (partBuilder.isNotEmpty()) {
+                components.add(curComponent.apply { text = partBuilder.toString() })
+                partBuilder = StringBuilder()
             }
 
-            // Handle text
-            val prevSize = rawComponents.size
-            parseColors(match.groupValues[1], rawComponents)
+            if (!createNew) return
 
-            // Handle click event
-            val clickType = match.groupValues[2]
-            val clickValue = match.groupValues[3].replace("\\\"", "\"")
-            val click = if (clickType.isNotEmpty()) {
-                ClickEvent(when (clickType) {
-                    CLICK_COMMAND -> ClickEvent.Action.RUN_COMMAND
-                    CLICK_SUGGEST_COMMAND -> ClickEvent.Action.SUGGEST_COMMAND
-                    CLICK_URL -> ClickEvent.Action.OPEN_URL
-                    CLICK_FILE -> ClickEvent.Action.OPEN_FILE
-                    CLICK_CHANGE_PAGE -> ClickEvent.Action.CHANGE_PAGE
-                    else -> throw IllegalArgumentException("Invalid click event type '$clickType'")
-                }, clickValue)
-            } else {
-                null
-            }
+            curComponent = TextComponent().apply {
+                if (!reset) {
+                    color = curComponent.colorRaw
 
-            // Handle hover event
-            val hoverType = match.groupValues[4]
-            val hoverValue = match.groupValues[5].replace("\\\"", "\"") // Should be JSON
-            val hover = if (hoverValue.isNotEmpty() && (hoverType.isEmpty() || hoverType == HOVER_TEXT)) {
-                // Text
-                HoverEvent(HoverEvent.Action.SHOW_TEXT, ArrayList<BaseComponent>(1).apply {
-                    parseColors(hoverValue, this)
-                }.toTypedArray())
-            } else if (hoverValue.isNotEmpty()) {
-                HoverEvent(when (hoverType) {
-                    HOVER_ITEM -> HoverEvent.Action.SHOW_ITEM
-                    HOVER_ACHIEVEMENT -> HoverEvent.Action.SHOW_ACHIEVEMENT
-                    HOVER_ENTITY -> HoverEvent.Action.SHOW_ENTITY
-                    else -> throw IllegalArgumentException("Invalid hover event type '$hoverType'")
-                }, arrayOf(TextComponent(hoverValue)))
-            } else {
-                null
-            }
-
-            // Set events
-            if (prevSize != rawComponents.size) {
-                for (i in prevSize until rawComponents.size) {
-                    rawComponents[i].clickEvent = click
-                    rawComponents[i].hoverEvent = hover
+                    // Can't use property access syntax since isBold, isItalic, etc. expect non-nullable value
+                    // new.isBold = curComponent.isBoldRaw
+                    setBold(curComponent.isBoldRaw)
+                    setItalic(curComponent.isItalicRaw)
+                    setObfuscated(curComponent.isObfuscatedRaw)
+                    setUnderlined(curComponent.isUnderlinedRaw)
+                    setStrikethrough(curComponent.isStrikethroughRaw)
                 }
             }
-
-            prevRange = match.range
-        } // for (match in matches)
-
-        /* Handle final colors */
-        if (prevRange.endInclusive + 1 != raw.length) {
-            parseColors(raw.substring(prevRange.endInclusive + 1), rawComponents)
         }
 
-        return rawComponents.toTypedArray()
-    }
+        /**
+         * Processes the current event and adds it to the display text element(s) of the group.
+         */
+        fun processEvent() {
+            if (activeEvent == null) return
 
-    private fun parseColors(raw: String, dest: MutableList<BaseComponent>) {
-        var curComponent: TextComponent = TextComponent()
-        curComponent.color = ChatColor.WHITE
-
-        // Helper function
-        fun addAndNext(resetColor: Boolean) {
-            val new = TextComponent()
-
-            // Only add component if it actually contains text
-            if (!curComponent.text.isNullOrEmpty()) {
-                dest.add(curComponent)
-            }
-
-            if (!resetColor) {
-                new.color = curComponent.colorRaw
-
-                // Can't use property access syntax since isBold, isItalic, etc. expect non-nullable value
-                // new.isBold = curComponent.isBoldRaw
-                new.setBold(curComponent.isBoldRaw)
-                new.setItalic(curComponent.isItalicRaw)
-                new.setObfuscated(curComponent.isObfuscatedRaw)
-                new.setUnderlined(curComponent.isUnderlinedRaw)
-                new.setStrikethrough(curComponent.isStrikethroughRaw)
-            }
-
-            curComponent = new
-        }
-
-        var prevRange = IntRange(-1, -1)
-
-        val matches = COLOR_PATTERN.findAll(raw)
-        for (match in matches) {
-            if (match.range.start != prevRange.endInclusive + 1) {
-                // Text found
-                curComponent.text = raw.substring(prevRange.endInclusive + 1, match.range.start)
-                addAndNext(false)
-            }
-
-            // No text found between previous and current, add format or color to curComponent
-            val found = ChatColor.getByChar(match.groupValues[0][1])
-
-            when (found) {
-                // RESET -> update text component and don't carry over color
-                ChatColor.RESET -> addAndNext(true)
-
-                // Formats
-                ChatColor.BOLD -> curComponent.isBold = true
-                ChatColor.ITALIC -> curComponent.isItalic = true
-                ChatColor.UNDERLINE -> curComponent.isUnderlined = true
-                ChatColor.MAGIC -> curComponent.isObfuscated = true
-                ChatColor.STRIKETHROUGH -> curComponent.isStrikethrough = true
-
-                // Color
-                else -> {
-                    if (curComponent.hasFormatting()) {
-                        // Reset formatting
-                        addAndNext(true)
+            fun executeOnIntermediateComponents(f: BaseComponent.() -> Unit) {
+                if (eventComponentIndex != components.size) {
+                    // Some components before curComponent were added, set the event on them as well
+                    for (i in eventComponentIndex until components.size) {
+                        components[i].f()
                     }
-                    curComponent.color = found
+                }
+                curComponent.f()
+                partBuilder = StringBuilder()
+                activeEvent = null
+                isGroupQuote = false
+            }
+
+            // Click event
+            when (activeEvent) {
+                CLICK_COMMAND -> ClickEvent.Action.RUN_COMMAND
+                CLICK_SUGGEST_COMMAND -> ClickEvent.Action.SUGGEST_COMMAND
+                CLICK_URL -> ClickEvent.Action.OPEN_URL
+                CLICK_FILE -> ClickEvent.Action.OPEN_FILE
+                CLICK_CHANGE_PAGE -> ClickEvent.Action.CHANGE_PAGE
+                else -> null
+            }?.apply {
+                val event = ClickEvent(this, partBuilder.toString())
+                return executeOnIntermediateComponents {
+                    clickEvent = event
                 }
             }
 
-            // Update previous range
-            prevRange = match.range
-        }
-
-        // Handle final text
-        if (prevRange.endInclusive + 1 != raw.length) {
-            if (!curComponent.text.isNullOrEmpty()) {
-                addAndNext(false)
+            // Hover event
+            when (activeEvent) {
+                HOVER_ACHIEVEMENT -> HoverEvent.Action.SHOW_ACHIEVEMENT
+                HOVER_ITEM -> HoverEvent.Action.SHOW_ITEM
+                HOVER_ENTITY -> HoverEvent.Action.SHOW_ENTITY
+                HOVER_TEXT -> HoverEvent.Action.SHOW_TEXT
+                else -> null
+            }?.apply {
+                val event = if (this == HoverEvent.Action.SHOW_TEXT) {
+                    // This is where colors are processed for the hover event
+                    HoverEvent(this, TextComponent.fromLegacyText(partBuilder.toString()))
+                } else {
+                    HoverEvent(this, arrayOf(TextComponent(partBuilder.toString())))
+                }
+                return executeOnIntermediateComponents {
+                    hoverEvent = event
+                }
             }
-            curComponent.text = raw.substring(prevRange.endInclusive + 1)
         }
 
-        if (!curComponent.text.isNullOrEmpty()) {
-            dest.add(curComponent)
+        charLoop@for ((i, char) in builder.withIndex()) {
+            if (replacedIndices.isNotEmpty()) {
+                val cur = replacedIndices.first()
+                if (cur.contains(i)) {
+                    // The current character was from a replacement
+                    // Simply add it to the current text and avoid any special processing
+
+                    if (i == cur.last) {
+                        // We've reached the final character in the replacement text, dispose of this replacement range
+                        replacedIndices.removeFirst()
+                        isReplacement = false
+                    } else {
+                        isReplacement = true
+                    }
+
+                    partBuilder.append(char)
+                    continue@charLoop
+                }
+            }
+
+            if (!isEscaped) {
+                // Last character wasn't an escape, handle special characters here
+                when (char) {
+                    // Set escape flag and skip character
+                    '\\' -> {
+                        isEscaped = true
+                        continue@charLoop
+                    }
+
+                    // Color code
+                    ChatColor.COLOR_CHAR -> {
+                        if (!isGroupSecondPart) {
+                            // We don't actually process colors here for the second part of a group
+                            isColorCode = true
+                            continue@charLoop
+                        }
+                    }
+
+                    // Beginning of an event, only if we're not in a replacement or other event right now
+                    '[' -> {
+                        if (!isReplacement && !isGroup) {
+                            var innerEscape = false
+                            var isBalanced = false
+                            closeFinder@for (j in i + 1 until builder.length - 1) {
+                                if (innerEscape) {
+                                    innerEscape = false
+                                    continue
+                                }
+
+                                when (builder[j]) {
+                                    '\\' -> {
+                                        innerEscape = true
+                                    }
+
+                                    ']' -> {
+                                        if (builder[j + 1] == '(') {
+                                            isBalanced = true
+                                        }
+                                        break@closeFinder
+                                    }
+                                }
+                            }
+
+                            if (isBalanced) {
+                                isGroup = true
+                                advanceComponent(false) // Advance component, but don't reset colors or formatting
+                                eventComponentIndex = components.size
+                                continue@charLoop
+                            }
+                        }
+                    }
+
+                    // End of the text part of an event, if we're in an event and not in a replacement
+                    ']' -> {
+                        if (!isReplacement && isGroup) {
+                            isExpectingSecondGroupPart = true
+                            continue@charLoop
+                        }
+                    }
+
+                    // Beginning of the inner part of an event, if we're expecting it and not in a replacement
+                    '(' -> {
+                        if (!isReplacement && isExpectingSecondGroupPart) {
+                            isExpectingSecondGroupPart = false
+                            isGroupSecondPart = true
+
+                            // Move text to component, since we're done adding to it
+                            curComponent.text = partBuilder.toString()
+                            partBuilder = StringBuilder()
+                            continue@charLoop
+                        }
+                    }
+
+                    // End of the inner part of an event, if we're currently in one
+                    ')' -> {
+                        if (!isReplacement && isGroupSecondPart) {
+                            isGroup = false
+                            isGroupSecondPart = false
+                            processEvent() // There may be a pending event waiting to be added
+                            continue@charLoop
+                        }
+                    }
+                }
+
+                if (isGroupSecondPart) {
+                    // If we're in the second part of a group, handle special characters here
+                    when (char) {
+                        // Beginning (or end) of quoted section
+                        '"' -> {
+                            isGroupQuote = !isGroupQuote
+
+                            if (!isGroupQuote) {
+                                // We were just in a quote, handle text appropriately
+                                processEvent()
+                            } else if (activeEvent == null) {
+                                // If we're entering a quoted part and no activeEvent is set, then assume HOVER_TEXT
+                                activeEvent = HOVER_TEXT
+                            }
+                            continue@charLoop
+                        }
+
+                        // Any event - set activeEvent if not already set
+                        CLICK_COMMAND,
+                        CLICK_SUGGEST_COMMAND,
+                        CLICK_URL,
+                        CLICK_FILE,
+                        CLICK_CHANGE_PAGE,
+                        HOVER_ACHIEVEMENT,
+                        HOVER_ITEM,
+                        HOVER_ENTITY,
+                        HOVER_TEXT -> {
+                            if (activeEvent == null) {
+                                activeEvent = char
+                                continue@charLoop
+                            }
+                        }
+
+                        // Anything else should be skipped unless quoted
+                        else -> {
+                            if (!isGroupQuote) {
+                                continue@charLoop
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Escape was consumed
+            isEscaped = false
+
+            // If the beginning of an event just took place, but the next immediate character wasn't a (,
+            // then turn off the expectation flag.
+            isExpectingSecondGroupPart = false
+
+            if (isColorCode) {
+                // Consume color code
+                isColorCode = false
+                val chatColor = ChatColor.getByChar(char)
+
+                if (partBuilder.isNotEmpty() && chatColor >= ChatColor.MAGIC && chatColor <= ChatColor.ITALIC) {
+                    // If the chatColor is a format and there's already text, advance to the next component
+                    advanceComponent(false)
+                }
+
+                if (chatColor != null) {
+                    when (chatColor) {
+                        // Color or reset, advance part and update color where applicable
+                        ChatColor.RESET,
+                        in ChatColor.BLACK..ChatColor.WHITE -> {
+                            advanceComponent(true)
+                            if (chatColor != ChatColor.RESET) curComponent.color = chatColor
+                        }
+
+                        // Formatting codes
+                        ChatColor.MAGIC -> curComponent.isObfuscated = true
+                        ChatColor.BOLD -> curComponent.isBold = true
+                        ChatColor.STRIKETHROUGH -> curComponent.isStrikethrough = true
+                        ChatColor.UNDERLINE -> curComponent.isUnderlined = true
+                        ChatColor.ITALIC -> curComponent.isItalic = true
+
+                        else -> { }
+                    }
+
+                    // The color/formatting code was successfully processed, lets move on
+                    continue@charLoop
+                }
+            }
+
+            // Append character to builder
+            partBuilder.append(char)
         }
+
+        // Last advance
+        advanceComponent(true, false)
+        return components.toTypedArray()
     }
 
 }
