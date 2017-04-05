@@ -33,9 +33,13 @@ class McmlParserTest {
 
     private fun assertMcmlEquals(raw: String, expected: Array<out BaseComponent>, replacements: Map<String, Any>? = null) {
         val res = parser.parse(raw, replacements)
-        for ((i, component) in res.withIndex()) {
-            val str1 = expected[i].toString()
-            val str2 = component.toString()
+        assert(expected.size == res.size) {
+            "Input string '$raw' failed test: invalid number of results: \nParsed:\n\t${res.joinToString("\n\t")}"
+        }
+
+        for ((i, component) in expected.withIndex()) {
+            val str1 = component.toString()
+            val str2 = res[i].toString()
             assert(str1 == str2) {
                 "Input string '$raw' failed test:\nParsed: $str2\nExpected: $str1"
             }
@@ -96,6 +100,13 @@ class McmlParserTest {
 
     @Test
     fun eventsTest() {
+        assertMcmlEquals(translate("""Click [here](>"google.com" "Click to open link")!"""),
+                ComponentBuilder("Click ").append("here")
+                        .event(ClickEvent(ClickEvent.Action.OPEN_URL, "google.com"))
+                        .event(HoverEvent(HoverEvent.Action.SHOW_TEXT, ComponentBuilder("Click to open link").create()))
+                        .append("!", ComponentBuilder.FormatRetention.NONE)
+                        .create())
+
         assertMcmlEquals(translate("""This "is" a [quote](!"/say \"hello\" world!" "One \"more\" quote!")"""),
                 ComponentBuilder("""This "is" a """).append("quote")
                         .event(ClickEvent(ClickEvent.Action.RUN_COMMAND, """/say "hello" world!"""))
