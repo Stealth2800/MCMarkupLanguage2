@@ -300,6 +300,7 @@ class McmlParser(vararg serializers: JsonSerializer) {
                             isGroup = false
                             isGroupSecondPart = false
                             processEvent() // There may be a pending event waiting to be added
+                            advanceComponent(true) // Event just finished, advance component
                             continue@charLoop
                         }
                     }
