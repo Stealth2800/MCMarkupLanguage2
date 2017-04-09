@@ -88,7 +88,7 @@ class McmlParser(vararg serializers: JsonSerializer) {
         // Set replacements and keep track of indices
         val replacedIndices = LinkedList<IntRange>()
         replacements?.forEach { k, v ->
-            val start = builder.indexOf(k)
+            val start = builder.indexOf(k, replacedIndices.lastOrNull()?.endInclusive ?: 0)
             if (start == -1) return@forEach
 
             val replacement = v as? String ?: (v?.let { serializers?.get(v::class.java)?.serialize(v) } ?: "null")
