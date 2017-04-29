@@ -243,9 +243,6 @@ class McmlParser(vararg serializers: JsonSerializer) {
                     } else {
                         isReplacement = true
                     }
-
-                    partBuilder.append(char)
-                    continue@charLoop
                 }
             }
 
