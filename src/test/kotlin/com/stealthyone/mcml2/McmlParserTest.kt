@@ -71,6 +71,12 @@ class McmlParserTest {
                 ComponentBuilder("Hello WORLD {word2} this is a TEST").create(),
                 mapOf("{word1}" to "WORLD {word2}", "{word2}" to "TEST")
         )
+
+        assertMcmlEquals(
+                translate("Hello {word1} this is the same {word1}"),
+                ComponentBuilder("Hello WORLD this is the same WORLD").create(),
+                mapOf("{word1}" to "WORLD")
+        )
     }
 
     @Test

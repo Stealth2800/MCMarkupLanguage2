@@ -86,15 +86,43 @@ class McmlParser(vararg serializers: JsonSerializer) {
         val components = LinkedList<BaseComponent>()
 
         // Set replacements and keep track of indices
-        val replacedIndices = LinkedList<IntRange>()
+        val replacementsToApply = ArrayList<Pair<IntRange, String>>() // Range of key -> replacement
         replacements?.forEach { k, v ->
-            val start = builder.indexOf(k, replacedIndices.lastOrNull()?.endInclusive ?: 0)
-            if (start == -1) return@forEach
+            var lastIndex = 0
+            // Lazy for expensive serializers (which shouldn't really be expensive, making this lazy call
+            // unnecessary?)
+            val replacement by lazy {
+                v as? String ?: (v?.let { serializers?.get(v::class.java)?.serialize(v) } ?: "null")
+            }
 
-            val replacement = v as? String ?: (v?.let { serializers?.get(v::class.java)?.serialize(v) } ?: "null")
+            /*
+             * While we're performing replacements, we store the replaced indices (adjusted) so we don't process
+             * them specially later on. This prevents injection of colors, hover/click events, etc.
+             */
 
-            builder.replace(start, start + k.length, replacement)
-            replacedIndices.add(start .. start + replacement.length - 1)
+            // Get replacements
+            while (true) {
+                val start = builder.indexOf(k, lastIndex)
+                if (start == -1) return@forEach
+
+                val range = start .. start + k.length - 1
+                replacementsToApply.add(range to replacement)
+                lastIndex = range.last
+            }
+        }
+
+        // If there are replacements to apply, do it
+        val replacedIndices = LinkedList<IntRange>()
+        if (replacementsToApply.isNotEmpty()) {
+            replacementsToApply.sortBy { it.first.first }
+
+            var offset = 0
+            for ((range, replacement) in replacementsToApply) {
+                val fixedRange = range.first + offset .. range.endInclusive + offset
+                builder.replace(fixedRange.first, fixedRange.endInclusive + 1, replacement)
+                replacedIndices.add(fixedRange.first .. fixedRange.endInclusive + replacement.length)
+                offset += replacement.length - (range.last - range.first + 1)
+            }
         }
 
         // Parse colors and events
