@@ -251,8 +251,11 @@ class McmlParser(vararg serializers: JsonSerializer) {
                 when (char) {
                     // Set escape flag and skip character
                     '\\' -> {
-                        isEscaped = true
-                        continue@charLoop
+                        if (!isReplacement) {
+                            // Don't process escapes in replaced text
+                            isEscaped = true
+                            continue@charLoop
+                        }
                     }
 
                     // Color code
