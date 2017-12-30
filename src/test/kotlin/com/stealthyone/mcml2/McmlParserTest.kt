@@ -206,6 +206,34 @@ class McmlParserTest {
                 .append("Example [broadcast").color(ChatColor.WHITE)
                 .append(" message", ComponentBuilder.FormatRetention.NONE)
                 .create())
+
+        assertMcmlEquals(translate("&8This is a [&freplacement test](\"&a{TEXT}\")"),
+                ComponentBuilder("This is a ").color(ChatColor.DARK_GRAY)
+                .append("replacement test").color(ChatColor.WHITE)
+                        .event(HoverEvent(HoverEvent.Action.SHOW_TEXT, ComponentBuilder("\"Hello World!\"")
+                                .color(ChatColor.GREEN).create()))
+                .create(), mapOf("{TEXT}" to "\"Hello World!\""))
+
+        assertMcmlEquals(translate("&8This is a [&freplacement test](\"&a{TEXT}\")"),
+                ComponentBuilder("This is a ").color(ChatColor.DARK_GRAY)
+                .append("replacement test").color(ChatColor.WHITE)
+                        .event(HoverEvent(HoverEvent.Action.SHOW_TEXT, ComponentBuilder("Hey")
+                                .color(ChatColor.GREEN).create()))
+                .create(), mapOf("{TEXT}" to "Hey"))
+
+        assertMcmlEquals(translate("&8This is a [&freplacement test](\"&a{TEXT} {TEXT2}\")"),
+                ComponentBuilder("This is a ").color(ChatColor.DARK_GRAY)
+                .append("replacement test").color(ChatColor.WHITE)
+                        .event(HoverEvent(HoverEvent.Action.SHOW_TEXT, ComponentBuilder("Hello World! Hey")
+                                .color(ChatColor.GREEN).create()))
+                .create(), mapOf("{TEXT}" to "Hello World!", "{TEXT2}" to "Hey"))
+
+        assertMcmlEquals(translate("&8This is a [&freplacement test](\"&a{TEXT} {TEXT2}\")"),
+                ComponentBuilder("This is a ").color(ChatColor.DARK_GRAY)
+                .append("replacement test").color(ChatColor.WHITE)
+                        .event(HoverEvent(HoverEvent.Action.SHOW_TEXT, ComponentBuilder("Hey Hello World!")
+                                .color(ChatColor.GREEN).create()))
+                .create(), mapOf("{TEXT}" to "Hey", "{TEXT2}" to "Hello World!"))
     }
 
 }
