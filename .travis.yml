@@ -1,5 +1,0 @@
-language: java
-
-after_success:
-  - test $TRAVIS_BRANCH = "master" && mvn deploy --settings .travis-settings.xml -DskipTests=true -B
-  - test $TRAVIS_BRANCH = "develop" && mvn deploy --settings .travis-settings.xml -DskipTests=true -B
