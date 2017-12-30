@@ -36,7 +36,7 @@ object BukkitItemJsonSerializer : JsonSerializer(ItemStack::class.java) {
         val item = obj as ItemStack
 
         // NMS ItemStack
-        val nmsItem = cb_CraftItemStack_asNMSCopy?.invoke(item)
+        val nmsItem = cb_CraftItemStack_asNMSCopy?.invoke(null, item)
             ?: return FAIL_MESSAGE
 
         // Empty NBTTagCompound

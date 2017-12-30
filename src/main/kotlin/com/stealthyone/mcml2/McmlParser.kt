@@ -89,11 +89,8 @@ class McmlParser(vararg serializers: JsonSerializer) {
         val replacementsToApply = ArrayList<Pair<IntRange, String>>() // Range of key -> replacement
         replacements?.forEach { k, v ->
             var lastIndex = 0
-            // Lazy for expensive serializers (which shouldn't really be expensive, making this lazy call
-            // unnecessary?)
-            val replacement by lazy {
-                v as? String ?: (v?.let { serializers?.get(v::class.java)?.serialize(v) } ?: "null")
-            }
+            val replacement =
+                    v as? String ?: (v?.let { serializers?.get(v::class.java)?.serialize(v) } ?: "null")
 
             /*
              * While we're performing replacements, we store the replaced indices (adjusted) so we don't process
@@ -105,7 +102,7 @@ class McmlParser(vararg serializers: JsonSerializer) {
                 val start = builder.indexOf(k, lastIndex)
                 if (start == -1) return@forEach
 
-                val range = start .. start + k.length - 1
+                val range = start until start + k.length
                 replacementsToApply.add(range to replacement)
                 lastIndex = range.last
             }
@@ -120,7 +117,7 @@ class McmlParser(vararg serializers: JsonSerializer) {
             for ((range, replacement) in replacementsToApply) {
                 val fixedRange = range.first + offset .. range.endInclusive + offset
                 builder.replace(fixedRange.first, fixedRange.endInclusive + 1, replacement)
-                replacedIndices.add(fixedRange.first .. fixedRange.endInclusive + replacement.length)
+                replacedIndices.add(fixedRange.first .. fixedRange.first + replacement.length)
                 offset += replacement.length - (range.last - range.first + 1)
             }
         }
@@ -339,16 +336,18 @@ class McmlParser(vararg serializers: JsonSerializer) {
                     when (char) {
                         // Beginning (or end) of quoted section
                         '"' -> {
-                            isGroupQuote = !isGroupQuote
+                            if (!isReplacement) {
+                                isGroupQuote = !isGroupQuote
 
-                            if (!isGroupQuote) {
-                                // We were just in a quote, handle text appropriately
-                                processEvent()
-                            } else if (activeEvent == null) {
-                                // If we're entering a quoted part and no activeEvent is set, then assume HOVER_TEXT
-                                activeEvent = HOVER_TEXT
+                                if (!isGroupQuote) {
+                                    // We were just in a quote, handle text appropriately
+                                    processEvent()
+                                } else if (activeEvent == null) {
+                                    // If we're entering a quoted part and no activeEvent is set, then assume HOVER_TEXT
+                                    activeEvent = HOVER_TEXT
+                                }
+                                continue@charLoop
                             }
-                            continue@charLoop
                         }
 
                         // Any event - set activeEvent if not already set
