@@ -59,6 +59,24 @@ class McmlParserTest {
                 ComponentBuilder("Hello [Hello](\"Hover Text!\") there!").create(),
                 mapOf("{1}" to "[Hello](\"Hover Text!\")")
         )
+
+        assertMcmlEquals(
+                translate("Hello {word1} this is a {word2}"),
+                ComponentBuilder("Hello WORLD this is a TEST").create(),
+                mapOf("{word1}" to "WORLD", "{word2}" to "TEST")
+        )
+
+        assertMcmlEquals(
+                translate("Hello {word1} this is a {word2}"),
+                ComponentBuilder("Hello WORLD {word2} this is a TEST").create(),
+                mapOf("{word1}" to "WORLD {word2}", "{word2}" to "TEST")
+        )
+
+        assertMcmlEquals(
+                translate("Hello {word1} this is the same {word1}"),
+                ComponentBuilder("Hello WORLD this is the same WORLD").create(),
+                mapOf("{word1}" to "WORLD")
+        )
     }
 
     @Test
